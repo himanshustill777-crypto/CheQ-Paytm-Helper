@@ -6,31 +6,58 @@ import android.view.accessibility.AccessibilityNodeInfo
 
 class BillAccessibilityService : AccessibilityService() {
     private val forbidden = Regex("(?i)(otp|cvv|pin|password|passcode|one time password|verification code)")
-    private val billHints = Regex("(?i)(amount|due|bill|outstanding|minimum|total|payable|payment|date|credit card|card ending|₹|rs\\.?|inr)")
-    private val moneyLike = Regex("(?i)(₹\\s?[0-9,]+(?:\\.[0-9]{1,2})?|(?:rs\\.?|inr)\\s?[0-9,]+(?:\\.[0-9]{1,2})?)")
+    private val dueDate = Regex("(?i)due\\s*date\\s*[-:]?\\s*([0-9]{1,2}\\s+[a-z]{3,9}\\s+[0-9]{4})")
+    private val money = Regex("₹\\s*[0-9,]+(?:\\.[0-9]{1,2})?")
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg = event?.packageName?.toString() ?: return
-        if (!pkg.contains("paytm", ignoreCase = true) && pkg != "net.one97.paytm") return
+        val prefs = getSharedPreferences("bill", MODE_PRIVATE)
 
-        val root = rootInActiveWindow ?: return
+        if (!pkg.contains("paytm", true) && pkg != "net.one97.paytm") return
+        prefs.edit().putString("debug", "Paytm accessibility event received").apply()
+
+        val root = rootInActiveWindow ?: run {
+            prefs.edit().putString("debug", "Paytm detected, but visible window nodes were unavailable").apply()
+            return
+        }
+
         val lines = mutableListOf<String>()
         collectVisibleText(root, lines)
-
-        val safe = lines
-            .map { it.trim() }
-            .filter { it.length in 2..180 }
+        val safe = lines.map { it.trim() }
+            .filter { it.length in 1..180 }
             .filterNot { forbidden.containsMatchIn(it) }
             .distinct()
 
-        val relevant = safe.filter {
-            billHints.containsMatchIn(it) || moneyLike.containsMatchIn(it)
-        }.take(30)
+        prefs.edit().putString("debug", "Paytm nodes read: ${safe.size}").apply()
 
-        if (relevant.isNotEmpty()) {
-            getSharedPreferences("bill", MODE_PRIVATE)
-                .edit()
-                .putString("result", relevant.joinToString("\n"))
+        val dateLine = safe.firstOrNull { dueDate.containsMatchIn(it) }
+            ?: safe.firstOrNull { it.contains("Due Date", true) }
+
+        val totalIndex = safe.indexOfFirst { it.equals("Total Due", true) || it.contains("Total Due", true) }
+        val minIndex = safe.indexOfFirst { it.equals("Minimum Due", true) || it.contains("Minimum Due", true) }
+
+        fun amountNear(index: Int): String? {
+            if (index < 0) return null
+            for (i in index..minOf(index + 4, safe.lastIndex)) {
+                money.find(safe[i])?.value?.let { return it }
+            }
+            return null
+        }
+
+        val total = amountNear(totalIndex)
+        val minimum = amountNear(minIndex)
+        val card = safe.firstOrNull { it.contains("ICICI Bank", true) || Regex("(?i)xx\\s*\\d{4}").containsMatchIn(it) }
+
+        val result = mutableListOf<String>()
+        card?.let { result.add(it) }
+        dateLine?.let { result.add(it) }
+        total?.let { result.add("Total Due: $it") }
+        minimum?.let { result.add("Minimum Due: $it") }
+
+        if (result.isNotEmpty()) {
+            prefs.edit()
+                .putString("result", result.joinToString("\n"))
+                .putString("debug", "Bill fields captured successfully")
                 .apply()
         }
     }
