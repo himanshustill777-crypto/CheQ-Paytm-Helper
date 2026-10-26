@@ -1,0 +1,1 @@
+<resources><string name="app_name">CheQ Bill Helper</string><string name="accessibility_desc">User-initiated helper that opens Paytm and reads visible bill result text. It does not collect OTP, PIN, CVV, passwords, or bypass protected screens.</string></resources>
