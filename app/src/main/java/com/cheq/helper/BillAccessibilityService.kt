@@ -21,12 +21,41 @@ class BillAccessibilityService : AccessibilityService() {
         if (!pkg.contains("paytm", true) && pkg != "net.one97.paytm") return
         prefs.edit().putString("debug", "Paytm accessibility event received").apply()
 
-        val root = rootInActiveWindow ?: run {
-            prefs.edit().putString("debug", "Paytm detected, but visible window nodes were unavailable").apply()
-            return
-        }
+        val root = rootInActiveWindow
 
         if (prefs.getBoolean("auto_open_credit_card", false)) {
+            if (root == null) {
+                if (!gestureScheduled && SystemClock.elapsedRealtime() - lastAutoClickAt > 1200) {
+                    gestureScheduled = true
+                    lastAutoClickAt = SystemClock.elapsedRealtime()
+                    val dm = resources.displayMetrics
+                    val tapX = dm.widthPixels * 0.34f
+                    val tapY = dm.heightPixels * 0.455f
+                    val path = Path().apply { moveTo(tapX, tapY) }
+                    val gesture = GestureDescription.Builder()
+                        .addStroke(GestureDescription.StrokeDescription(path, 0, 80))
+                        .build()
+                    val sent = dispatchGesture(gesture, object : GestureResultCallback() {
+                        override fun onCompleted(gestureDescription: GestureDescription?) {
+                            prefs.edit()
+                                .putBoolean("auto_open_credit_card", false)
+                                .putString("debug", "AUTO OK: fallback tap sent without Paytm nodes")
+                                .apply()
+                            gestureScheduled = false
+                        }
+                        override fun onCancelled(gestureDescription: GestureDescription?) {
+                            prefs.edit().putString("debug", "AUTO fallback tap cancelled").apply()
+                            gestureScheduled = false
+                        }
+                    }, null)
+                    if (!sent) {
+                        prefs.edit().putString("debug", "AUTO fallback tap could not be dispatched").apply()
+                        gestureScheduled = false
+                    }
+                }
+                prefs.edit().putString("debug", "AUTO: no Paytm nodes; using screen-position tap").apply()
+                return
+            }
             val targets = root.findAccessibilityNodeInfosByText("Credit Card Bill") + root.findAccessibilityNodeInfosByText("Credit Card Payment")
             val target = targets.firstOrNull { it.isVisibleToUser }
             if (target != null && SystemClock.elapsedRealtime() - lastAutoClickAt > 1500) {
@@ -73,6 +102,11 @@ class BillAccessibilityService : AccessibilityService() {
                 }
             }
             prefs.edit().putString("debug", "AUTO: Paytm home; tapping Credit Card Bill").apply()
+        }
+
+        if (root == null) {
+            prefs.edit().putString("debug", "Paytm detected; no readable nodes").apply()
+            return
         }
 
         val lines = mutableListOf<String>()
