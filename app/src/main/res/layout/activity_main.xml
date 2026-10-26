@@ -1,0 +1,7 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:padding="24dp" android:layout_width="match_parent" android:layout_height="match_parent">
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="CheQ Bill Helper" android:textSize="24sp" android:textStyle="bold"/>
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Test flow: enable Accessibility, then tap Open Paytm. Navigate to Credit Card Bill Payment. The helper only reads visible due/bill text and never OTP, PIN, CVV or passwords."/>
+<Button android:id="@+id/accessibility" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Enable Accessibility"/>
+<Button android:id="@+id/openPaytm" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Open Paytm"/>
+<TextView android:id="@+id/result" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Visible bill result will appear here after returning to this app."/>
+</LinearLayout>
