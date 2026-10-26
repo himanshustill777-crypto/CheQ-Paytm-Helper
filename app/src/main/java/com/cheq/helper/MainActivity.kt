@@ -17,6 +17,8 @@ class MainActivity : Activity() {
         }
 
         findViewById<Button>(R.id.openPaytm).setOnClickListener {
+            val prefs = getSharedPreferences("bill", MODE_PRIVATE)
+            prefs.edit().putBoolean("auto_open_credit_card", true).putString("debug", "Auto mode armed: opening Paytm").apply()
             val launch = packageManager.getLaunchIntentForPackage("net.one97.paytm")
             if (launch != null) {
                 startActivity(launch)
