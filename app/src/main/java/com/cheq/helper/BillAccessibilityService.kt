@@ -1,6 +1,7 @@
 package com.cheq.helper
 
 import android.accessibilityservice.AccessibilityService
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
@@ -8,6 +9,7 @@ class BillAccessibilityService : AccessibilityService() {
     private val forbidden = Regex("(?i)(otp|cvv|pin|password|passcode|one time password|verification code)")
     private val dueDate = Regex("(?i)due\\s*date\\s*[-:]?\\s*([0-9]{1,2}\\s+[a-z]{3,9}\\s+[0-9]{4})")
     private val money = Regex("₹\\s*[0-9,]+(?:\\.[0-9]{1,2})?")
+    private var lastAutoClickAt = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg = event?.packageName?.toString() ?: return
@@ -19,6 +21,27 @@ class BillAccessibilityService : AccessibilityService() {
         val root = rootInActiveWindow ?: run {
             prefs.edit().putString("debug", "Paytm detected, but visible window nodes were unavailable").apply()
             return
+        }
+
+        if (prefs.getBoolean("auto_open_credit_card", false)) {
+            val targets = root.findAccessibilityNodeInfosByText("Credit Card Bill") + root.findAccessibilityNodeInfosByText("Credit Card Payment")
+            val target = targets.firstOrNull { it.isVisibleToUser }
+            if (target != null && SystemClock.elapsedRealtime() - lastAutoClickAt > 1500) {
+                lastAutoClickAt = SystemClock.elapsedRealtime()
+                var n: AccessibilityNodeInfo? = target
+                var clicked = false
+                var hops = 0
+                while (n != null && hops < 6 && !clicked) {
+                    if (n.isClickable) clicked = n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    n = n.parent
+                    hops++
+                }
+                if (clicked) {
+                    prefs.edit().putBoolean("auto_open_credit_card", false).putString("debug", "AUTO OK: Credit Card Bill clicked").apply()
+                    return
+                }
+            }
+            prefs.edit().putString("debug", "AUTO: Paytm open, searching Credit Card Bill").apply()
         }
 
         val lines = mutableListOf<String>()
