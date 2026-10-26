@@ -1,6 +1,8 @@
 package com.cheq.helper
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
+import android.graphics.Path
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -10,6 +12,7 @@ class BillAccessibilityService : AccessibilityService() {
     private val dueDate = Regex("(?i)due\\s*date\\s*[-:]?\\s*([0-9]{1,2}\\s+[a-z]{3,9}\\s+[0-9]{4})")
     private val money = Regex("₹\\s*[0-9,]+(?:\\.[0-9]{1,2})?")
     private var lastAutoClickAt = 0L
+    private var gestureScheduled = false
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg = event?.packageName?.toString() ?: return
@@ -41,7 +44,35 @@ class BillAccessibilityService : AccessibilityService() {
                     return
                 }
             }
-            prefs.edit().putString("debug", "AUTO: Paytm open, searching Credit Card Bill").apply()
+            if (!gestureScheduled && SystemClock.elapsedRealtime() - lastAutoClickAt > 1200) {
+                gestureScheduled = true
+                lastAutoClickAt = SystemClock.elapsedRealtime()
+                val dm = resources.displayMetrics
+                val tapX = dm.widthPixels * 0.34f
+                val tapY = dm.heightPixels * 0.455f
+                val path = Path().apply { moveTo(tapX, tapY) }
+                val gesture = GestureDescription.Builder()
+                    .addStroke(GestureDescription.StrokeDescription(path, 0, 80))
+                    .build()
+                val sent = dispatchGesture(gesture, object : GestureResultCallback() {
+                    override fun onCompleted(gestureDescription: GestureDescription?) {
+                        prefs.edit()
+                            .putBoolean("auto_open_credit_card", false)
+                            .putString("debug", "AUTO gesture sent to Credit Card Bill tile")
+                            .apply()
+                        gestureScheduled = false
+                    }
+                    override fun onCancelled(gestureDescription: GestureDescription?) {
+                        prefs.edit().putString("debug", "AUTO gesture was cancelled").apply()
+                        gestureScheduled = false
+                    }
+                }, null)
+                if (!sent) {
+                    prefs.edit().putString("debug", "AUTO gesture could not be dispatched").apply()
+                    gestureScheduled = false
+                }
+            }
+            prefs.edit().putString("debug", "AUTO: Paytm home; tapping Credit Card Bill").apply()
         }
 
         val lines = mutableListOf<String>()
